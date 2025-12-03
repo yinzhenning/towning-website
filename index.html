@@ -68,10 +68,10 @@
     <script>
         // ================= 配置区域 =================
         const CONFIG = {
-            username: 'yinzhenning', // 务必修改这里
-            repo: 'towning-website',           // 务必修改这里
-            folder: 'posts',                  // 务必修改这里
-            branch: 'main'                    // 如果你的分支是 master，请修改这里
+            username: 'yinzhenning',  // 已更新
+            repo: 'towning-',         // 已更新 (注意这里的横杠)
+            folder: 'posts',
+            branch: 'main'            // 默认 main，如果是老仓库可能是 master
         };
         // ===========================================
 
@@ -88,7 +88,7 @@
                 const response = await fetch(apiUrl);
                 
                 if (!response.ok) {
-                    if (response.status === 404) throw new Error(`找不到 '${CONFIG.folder}' 文件夹。请检查 CONFIG 配置。`);
+                    if (response.status === 404) throw new Error(`找不到 'posts' 文件夹。请确认你的仓库 '${CONFIG.repo}' 是公开(Public)的，且根目录下确实有 posts 文件夹。`);
                     throw new Error("连接 GitHub 失败，请刷新重试。");
                 }
 
@@ -102,7 +102,6 @@
 
                 const promises = validFiles.map(async (file) => {
                     // 构建 GitHub Pages 的访问链接 (用于显示 PDF)
-                    // 使用 encodeURIComponent 处理中文文件名
                     const pagesUrl = `https://${CONFIG.username}.github.io/${CONFIG.repo}/${CONFIG.folder}/${encodeURIComponent(file.name)}`;
                     // 构建 Raw 链接 (用于 Markdown 下载或备用)
                     const rawUrl = `https://raw.githubusercontent.com/${CONFIG.username}/${CONFIG.repo}/${CONFIG.branch}/${file.path}`;
@@ -134,7 +133,7 @@
             } catch (err) {
                 appContainer.innerHTML = '';
                 statusMsg.classList.remove('hidden');
-                statusMsg.innerHTML = `<div class="bg-red-50 text-red-600 p-4 rounded-lg text-center">错误: ${err.message} <br> <small class="text-gray-500">请检查代码顶部的 CONFIG 用户名和仓库名是否正确。</small></div>`;
+                statusMsg.innerHTML = `<div class="bg-red-50 text-red-600 p-4 rounded-lg text-center">错误: ${err.message}</div>`;
             }
         }
 
@@ -184,15 +183,16 @@
             let contentBody = '';
 
             if (post.type === 'pdf') {
-                // PDF 增强版显示逻辑
                 contentBody = `
                     <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r">
                         <div class="flex">
                             <div class="flex-shrink-0"><i data-lucide="alert-circle" class="h-5 w-5 text-yellow-400"></i></div>
                             <div class="ml-3">
                                 <p class="text-sm text-yellow-700">
-                                    如果你刚上传文件，预览可能需要 <strong>1-3分钟</strong> 才能生效（GitHub 需要时间部署）。
-                                    <br>如果下方显示空白或报错，请点击“备用预览”或直接下载。
+                                    <strong>预览说明：</strong><br>
+                                    1. 必须在 GitHub 设置里开启 <strong>Pages</strong> 服务，且仓库必须是 <strong>Public (公开)</strong> 的。<br>
+                                    2. 刚上传的文件需要等几分钟才能预览。<br>
+                                    3. 如果预览失败，请使用下方按钮直接下载。
                                 </p>
                             </div>
                         </div>
@@ -213,7 +213,7 @@
                          <a href="https://docs.google.com/viewer?url=${encodeURIComponent(post.rawUrl)}&embedded=true" target="_blank" class="flex items-center px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 transition">
                             <i data-lucide="eye" class="w-4 h-4 mr-2"></i> 谷歌预览 (备用)
                         </a>
-                        <a href="${post.content}" download class="flex items-center px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 transition">
+                        <a href="${post.rawUrl}" download class="flex items-center px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 transition">
                             <i data-lucide="download" class="w-4 h-4 mr-2"></i> 下载文件
                         </a>
                     </div>
