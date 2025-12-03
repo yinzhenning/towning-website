@@ -1,4 +1,4 @@
-
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -10,13 +10,11 @@
     <style>
         .fade-in { animation: fadeIn 0.5s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        /* 漂亮的渐变背景，用于没有封面的文章 */
+        
         .gradient-bg-0 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
         .gradient-bg-1 { background: linear-gradient(135deg, #2af598 0%, #009efd 100%); }
         .gradient-bg-2 { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%); }
         .gradient-bg-3 { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); }
-        /* 专门为 PDF 准备的背景 */
-        .gradient-bg-pdf { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%); }
         
         .prose h1 { font-size: 2rem; font-weight: 800; margin-bottom: 1rem; color: #1f2937; line-height: 1.2; }
         .prose h2 { font-size: 1.5rem; font-weight: 700; margin-top: 2rem; margin-bottom: 1rem; color: #374151; }
@@ -51,10 +49,7 @@
     <!-- 主体内容 -->
     <main class="flex-grow container mx-auto px-4 py-8 max-w-6xl">
         <div id="status-message" class="hidden mb-6"></div>
-        
-        <!-- 内容挂载点 -->
         <div id="app-container" class="fade-in min-h-[50vh]">
-            <!-- 骨架屏 -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 animate-pulse">
                 <div class="h-64 bg-gray-200 rounded-2xl"></div>
                 <div class="h-64 bg-gray-200 rounded-2xl"></div>
@@ -63,10 +58,9 @@
         </div>
     </main>
 
-    <!-- 底部 -->
     <footer class="bg-white border-t border-gray-100 mt-12 py-8">
         <div class="text-center text-gray-400 text-sm">
-            <p>无需后端 · 纯静态 · 自动解析</p>
+            <p>Powered by GitHub Pages</p>
             <p class="mt-2">&copy; 2024 Towning's AI Blog</p>
         </div>
     </footer>
@@ -74,10 +68,10 @@
     <script>
         // ================= 配置区域 =================
         const CONFIG = {
-            username: 'yinzhenning', // 修改这里：你的 GitHub 用户名
-            repo: 'towning-website',           // 修改这里：你的仓库名
-            folder: 'posts',                  // 你的文章文件夹名称
-            branch: 'main'                    // 分支名
+            username: 'your-github-username', // 务必修改这里
+            repo: 'your-repo-name',           // 务必修改这里
+            folder: 'posts',                  // 务必修改这里
+            branch: 'main'                    // 如果你的分支是 master，请修改这里
         };
         // ===========================================
 
@@ -88,51 +82,44 @@
         lucide.createIcons();
         document.getElementById('github-link').href = `https://github.com/${CONFIG.username}/${CONFIG.repo}`;
 
-        // 初始化
         async function init() {
             try {
-                // 1. 获取文件列表
                 const apiUrl = `https://api.github.com/repos/${CONFIG.username}/${CONFIG.repo}/contents/${CONFIG.folder}`;
                 const response = await fetch(apiUrl);
                 
                 if (!response.ok) {
-                    if (response.status === 404) throw new Error(`找不到 '${CONFIG.folder}' 文件夹。请在仓库根目录新建此文件夹并上传 .md 或 .pdf 文件。`);
-                    if (response.status === 403) throw new Error("API 访问过快，请稍后刷新。");
-                    throw new Error("连接 GitHub 失败，请检查配置。");
+                    if (response.status === 404) throw new Error(`找不到 '${CONFIG.folder}' 文件夹。请检查 CONFIG 配置。`);
+                    throw new Error("连接 GitHub 失败，请刷新重试。");
                 }
 
                 const files = await response.json();
-                
-                // 筛选 .md 和 .pdf 文件
                 const validFiles = files.filter(f => f.name.toLowerCase().endsWith('.md') || f.name.toLowerCase().endsWith('.pdf'));
 
                 if (validFiles.length === 0) {
-                    appContainer.innerHTML = `<div class="text-center text-gray-500 py-20">文件夹是空的，快去上传文章吧！</div>`;
+                    appContainer.innerHTML = `<div class="text-center text-gray-500 py-20">文件夹是空的。</div>`;
                     return;
                 }
 
-                // 2. 并行处理文件
                 const promises = validFiles.map(async (file) => {
-                    const rawUrl = `https://raw.githubusercontent.com/${CONFIG.username}/${CONFIG.repo}/${CONFIG.branch}/${file.path}`;
-                    // 如果你的网站开启了 GitHub Pages，PDF 使用 Pages 链接通常加载体验更好（避免 raw 的强制下载头）
-                    // 格式通常为: https://username.github.io/repo/folder/filename
+                    // 构建 GitHub Pages 的访问链接 (用于显示 PDF)
+                    // 使用 encodeURIComponent 处理中文文件名
                     const pagesUrl = `https://${CONFIG.username}.github.io/${CONFIG.repo}/${CONFIG.folder}/${encodeURIComponent(file.name)}`;
+                    // 构建 Raw 链接 (用于 Markdown 下载或备用)
+                    const rawUrl = `https://raw.githubusercontent.com/${CONFIG.username}/${CONFIG.repo}/${CONFIG.branch}/${file.path}`;
                     
                     const isPdf = file.name.toLowerCase().endsWith('.pdf');
 
                     if (isPdf) {
-                        // PDF 处理逻辑：不需要下载内容，直接构造对象
                         return {
                             id: file.name,
                             title: file.name.replace('.pdf', '').replace(/_/g, ' '),
-                            summary: 'PDF 文档 · 点击在线阅读',
+                            summary: 'PDF 文档 · 支持在线预览与下载',
                             image: null,
-                            content: pagesUrl, // 使用 GitHub Pages URL 以获得更好的预览支持
-                            rawUrl: rawUrl,    // 备用下载链接
+                            content: pagesUrl, // 主要预览链接
+                            rawUrl: rawUrl,    // 备用链接
                             type: 'pdf'
                         };
                     } else {
-                        // Markdown 处理逻辑：下载内容并解析
                         const res = await fetch(rawUrl);
                         const text = await res.text();
                         const post = parseSmartPost(text, file.name);
@@ -147,96 +134,49 @@
             } catch (err) {
                 appContainer.innerHTML = '';
                 statusMsg.classList.remove('hidden');
-                statusMsg.innerHTML = `<div class="bg-red-50 text-red-600 p-4 rounded-lg text-center">${err.message}</div>`;
+                statusMsg.innerHTML = `<div class="bg-red-50 text-red-600 p-4 rounded-lg text-center">错误: ${err.message} <br> <small class="text-gray-500">请检查代码顶部的 CONFIG 用户名和仓库名是否正确。</small></div>`;
             }
         }
 
-        // --- 核心：智能解析器 (无需元数据) ---
         function parseSmartPost(content, filename) {
-            const post = {
-                id: filename,
-                content: content,
-                title: '',
-                summary: '',
-                image: null
-            };
-
-            // 1. 智能提取标题
+            const post = { id: filename, content: content, title: '', summary: '', image: null };
             const titleMatch = content.match(/^#\s+(.+)$/m);
-            if (titleMatch) {
-                post.title = titleMatch[1].trim();
-            } else {
-                post.title = filename.replace('.md', '').replace(/_/g, ' ');
-            }
-
-            // 2. 智能提取图片
+            post.title = titleMatch ? titleMatch[1].trim() : filename.replace('.md', '').replace(/_/g, ' ');
             const imgMatch = content.match(/!\[.*?\]\((.*?)\)/);
-            if (imgMatch) {
-                post.image = imgMatch[1];
-            }
-
-            // 3. 智能提取摘要
-            let plainText = content
-                .replace(/!\[.*?\]\(.*?\)/g, '')
-                .replace(/#+\s.+/g, '')
-                .replace(/```[\s\S]*?```/g, '')
-                .replace(/(\*\*|__)(.*?)\1/g, '$2')
-                .replace(/\n/g, ' ')
-                .trim();
-            
-            post.summary = plainText.substring(0, 120) + (plainText.length > 120 ? '...' : '');
-
+            if (imgMatch) post.image = imgMatch[1];
+            let plainText = content.replace(/!\[.*?\]\(.*?\)/g, '').replace(/#+\s.+/g, '').replace(/```[\s\S]*?```/g, '').replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/\n/g, ' ').trim();
+            post.summary = plainText.substring(0, 100) + '...';
             return post;
         }
 
-        // 渲染首页
         function renderHome() {
             let html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">';
-            
             allPosts.forEach((post, index) => {
-                let bgClass = `gradient-bg-${(post.title.length + index) % 4}`;
-                let icon = 'file-text';
-                
-                // 如果是 PDF，使用特定的样式
-                if (post.type === 'pdf') {
-                    bgClass = 'bg-gradient-to-br from-red-100 to-red-200'; // 红色系代表 PDF
-                    icon = 'file-warning'; // 或者 file-text
-                }
-                
-                // 图片区域
-                let mediaHtml = '';
-                if (post.image) {
-                    mediaHtml = `<div class="h-48 w-full overflow-hidden"><img src="${post.image}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" onerror="this.style.display='none'"></div>`;
-                } else {
-                    // 没有图片时的默认显示
-                    const iconHtml = post.type === 'pdf' 
-                        ? `<div class="flex flex-col items-center"><i data-lucide="file-text" class="w-12 h-12 text-red-500 mb-2"></i><span class="text-xs font-bold text-red-500 uppercase">PDF FILE</span></div>`
-                        : `<i data-lucide="file-text" class="w-12 h-12 opacity-50"></i>`;
-                        
-                    mediaHtml = `<div class="h-48 w-full ${bgClass} flex items-center justify-center text-white opacity-90">${iconHtml}</div>`;
-                }
+                let bgClass = post.type === 'pdf' ? 'bg-gradient-to-br from-rose-100 to-rose-200' : `gradient-bg-${(post.title.length + index) % 4}`;
+                let iconHtml = post.image 
+                    ? `<div class="h-48 w-full overflow-hidden"><img src="${post.image}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500"></div>`
+                    : `<div class="h-48 w-full ${bgClass} flex items-center justify-center text-white opacity-90"><i data-lucide="${post.type === 'pdf' ? 'file-text' : 'file-edit'}" class="w-12 h-12 opacity-50"></i></div>`;
 
                 html += `
                     <article class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 group cursor-pointer flex flex-col h-full" onclick="renderPost('${post.id}')">
-                        ${mediaHtml}
+                        ${iconHtml}
                         <div class="p-6 flex flex-col flex-grow">
-                            <h3 class="text-xl font-bold text-gray-900 mb-3 group-hover:text-indigo-600 transition leading-snug">${post.title}</h3>
-                            <p class="text-gray-500 text-sm line-clamp-3 mb-4 flex-grow">${post.summary || '点击阅读全文...'}</p>
-                            <div class="pt-4 border-t border-gray-50 flex items-center text-indigo-600 text-sm font-medium">
-                                ${post.type === 'pdf' ? '预览文档' : '阅读文章'} <i data-lucide="arrow-right" class="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1"></i>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2 group-hover:text-indigo-600 transition">${post.title}</h3>
+                            <div class="flex items-center space-x-2 mb-3">
+                                <span class="px-2 py-0.5 rounded text-xs font-medium ${post.type === 'pdf' ? 'bg-red-100 text-red-600' : 'bg-indigo-100 text-indigo-600'}">
+                                    ${post.type === 'pdf' ? 'PDF' : '文章'}
+                                </span>
                             </div>
+                            <p class="text-gray-500 text-sm line-clamp-3 mb-4 flex-grow">${post.summary}</p>
                         </div>
                     </article>
                 `;
             });
             html += '</div>';
-
             appContainer.innerHTML = html;
-            window.scrollTo(0, 0);
             lucide.createIcons();
         }
 
-        // 渲染文章详情
         function renderPost(id) {
             const post = allPosts.find(p => p.id === id);
             if (!post) return;
@@ -244,48 +184,53 @@
             let contentBody = '';
 
             if (post.type === 'pdf') {
-                // PDF 渲染：嵌入对象 + 下载链接
+                // PDF 增强版显示逻辑
                 contentBody = `
-                    <div class="w-full h-[80vh] bg-gray-100 rounded-xl overflow-hidden mb-8 border border-gray-200">
-                        <embed src="${post.content}" type="application/pdf" width="100%" height="100%" />
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-r">
+                        <div class="flex">
+                            <div class="flex-shrink-0"><i data-lucide="alert-circle" class="h-5 w-5 text-yellow-400"></i></div>
+                            <div class="ml-3">
+                                <p class="text-sm text-yellow-700">
+                                    如果你刚上传文件，预览可能需要 <strong>1-3分钟</strong> 才能生效（GitHub 需要时间部署）。
+                                    <br>如果下方显示空白或报错，请点击“备用预览”或直接下载。
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                    <div class="text-center">
-                        <p class="mb-4 text-gray-600">如果无法预览，请点击下方按钮下载：</p>
-                        <a href="${post.content}" target="_blank" class="inline-flex items-center px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition">
-                            <i data-lucide="download" class="w-5 h-5 mr-2"></i> 下载 PDF
+
+                    <!-- 主预览区 (iframe) -->
+                    <div class="w-full h-[80vh] bg-gray-100 rounded-xl overflow-hidden mb-6 border border-gray-200 shadow-inner relative">
+                        <iframe src="${post.content}" class="w-full h-full" frameborder="0">
+                            <p>您的浏览器不支持 iframe，请下载查看。</p>
+                        </iframe>
+                    </div>
+
+                    <!-- 操作按钮区 -->
+                    <div class="flex flex-wrap justify-center gap-4">
+                        <a href="${post.content}" target="_blank" class="flex items-center px-6 py-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition">
+                            <i data-lucide="external-link" class="w-4 h-4 mr-2"></i> 原网页打开
+                        </a>
+                         <a href="https://docs.google.com/viewer?url=${encodeURIComponent(post.rawUrl)}&embedded=true" target="_blank" class="flex items-center px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 transition">
+                            <i data-lucide="eye" class="w-4 h-4 mr-2"></i> 谷歌预览 (备用)
+                        </a>
+                        <a href="${post.content}" download class="flex items-center px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 transition">
+                            <i data-lucide="download" class="w-4 h-4 mr-2"></i> 下载文件
                         </a>
                     </div>
                 `;
             } else {
-                // Markdown 渲染
-                contentBody = `
-                    <article class="bg-white rounded-3xl shadow-lg border border-gray-100 p-8 md:p-12">
-                        <div class="prose prose-lg prose-indigo max-w-none">
-                            ${marked.parse(post.content)}
-                        </div>
-                    </article>
-                `;
+                contentBody = `<article class="bg-white rounded-3xl shadow-lg border border-gray-100 p-8 md:p-12"><div class="prose prose-lg prose-indigo max-w-none">${marked.parse(post.content)}</div></article>`;
             }
             
-            const html = `
+            appContainer.innerHTML = `
                 <div class="max-w-4xl mx-auto animate-fade-in">
-                    <button onclick="renderHome()" class="group mb-8 inline-flex items-center text-gray-500 hover:text-indigo-600 transition bg-white px-4 py-2 rounded-full shadow-sm border border-gray-100">
-                        <i data-lucide="arrow-left" class="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform"></i> 返回列表
+                    <button onclick="renderHome()" class="mb-6 flex items-center text-gray-500 hover:text-indigo-600 transition bg-white px-4 py-2 rounded-full shadow-sm border border-gray-100">
+                        <i data-lucide="arrow-left" class="w-4 h-4 mr-2"></i> 返回列表
                     </button>
-                    
-                    ${post.type === 'markdown' ? `<h1 class="text-3xl font-extrabold text-gray-900 mb-8 text-center">${post.title}</h1>` : ''}
-
+                    ${post.type === 'markdown' ? `<h1 class="text-3xl font-extrabold text-gray-900 mb-8 text-center">${post.title}</h1>` : `<h1 class="text-2xl font-bold text-gray-800 mb-6 text-center">${post.title}</h1>`}
                     ${contentBody}
-
-                    <div class="text-center mt-12 mb-8">
-                         <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})" class="text-gray-400 hover:text-gray-600 transition">
-                            <i data-lucide="arrow-up-circle" class="w-8 h-8 mx-auto mb-2"></i>
-                            <span class="text-xs">回到顶部</span>
-                        </button>
-                    </div>
                 </div>
             `;
-            appContainer.innerHTML = html;
             window.scrollTo(0, 0);
             lucide.createIcons();
         }
