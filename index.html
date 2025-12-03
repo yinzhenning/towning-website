@@ -2,14 +2,236 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Towning.top</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Towning's AI Blog</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; padding-top: 50px; }
-        h1 { color: #333; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* 漂亮的渐变背景，用于没有封面的文章 */
+        .gradient-bg-0 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .gradient-bg-1 { background: linear-gradient(135deg, #2af598 0%, #009efd 100%); }
+        .gradient-bg-2 { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%); }
+        .gradient-bg-3 { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); }
+        
+        .prose h1 { font-size: 2rem; font-weight: 800; margin-bottom: 1rem; color: #1f2937; line-height: 1.2; }
+        .prose h2 { font-size: 1.5rem; font-weight: 700; margin-top: 2rem; margin-bottom: 1rem; color: #374151; }
+        .prose p { margin-bottom: 1.25rem; line-height: 1.75; color: #4b5563; }
+        .prose img { border-radius: 0.5rem; max-width: 100%; height: auto; margin: 2rem auto; display: block; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .prose pre { background: #1f2937; color: #f3f4f6; padding: 1.5rem; border-radius: 0.5rem; overflow-x: auto; margin: 1.5rem 0; }
+        .prose a { color: #4f46e5; text-decoration: underline; }
+        .prose ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1.25rem; }
     </style>
 </head>
-<body>
-    <h1>欢迎来到 Towning.top</h1>
-    <p>网站正在通过 Vercel 搭建中...</p>
+<body class="bg-gray-50 font-sans text-gray-800 min-h-screen flex flex-col">
+
+    <!-- 顶部导航 -->
+    <nav class="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-gray-100">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center cursor-pointer" onclick="renderHome()">
+                    <div class="bg-indigo-600 text-white p-1.5 rounded-lg mr-2">
+                        <i data-lucide="book-open" class="h-5 w-5"></i>
+                    </div>
+                    <span class="text-xl font-bold text-gray-900 tracking-tight">Towning's Blog</span>
+                </div>
+                <div class="flex space-x-4">
+                    <a href="https://github.com" id="github-link" target="_blank" class="text-gray-500 hover:text-indigo-600 transition">
+                        <i data-lucide="github" class="h-5 w-5"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主体内容 -->
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-6xl">
+        <div id="status-message" class="hidden mb-6"></div>
+        
+        <!-- 内容挂载点 -->
+        <div id="app-container" class="fade-in min-h-[50vh]">
+            <!-- 骨架屏 -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 animate-pulse">
+                <div class="h-64 bg-gray-200 rounded-2xl"></div>
+                <div class="h-64 bg-gray-200 rounded-2xl"></div>
+                <div class="h-64 bg-gray-200 rounded-2xl"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 底部 -->
+    <footer class="bg-white border-t border-gray-100 mt-12 py-8">
+        <div class="text-center text-gray-400 text-sm">
+            <p>无需后端 · 纯静态 · 自动解析</p>
+            <p class="mt-2">&copy; 2024 Towning's AI Blog</p>
+        </div>
+    </footer>
+
+    <script>
+        // ================= 配置区域 =================
+        const CONFIG = {
+            username: 'your-github-username', // 修改这里：你的 GitHub 用户名
+            repo: 'your-repo-name',           // 修改这里：你的仓库名
+            folder: 'posts',                  // 你的文章文件夹名称
+            branch: 'main'                    // 分支名
+        };
+        // ===========================================
+
+        let allPosts = [];
+        const appContainer = document.getElementById('app-container');
+        const statusMsg = document.getElementById('status-message');
+
+        lucide.createIcons();
+        document.getElementById('github-link').href = `https://github.com/${CONFIG.username}/${CONFIG.repo}`;
+
+        // 初始化
+        async function init() {
+            try {
+                // 1. 获取文件列表
+                const apiUrl = `https://api.github.com/repos/${CONFIG.username}/${CONFIG.repo}/contents/${CONFIG.folder}`;
+                const response = await fetch(apiUrl);
+                
+                if (!response.ok) {
+                    if (response.status === 404) throw new Error(`找不到 '${CONFIG.folder}' 文件夹。请在仓库根目录新建此文件夹并上传 .md 文件。`);
+                    if (response.status === 403) throw new Error("API 访问过快，请稍后刷新。");
+                    throw new Error("连接 GitHub 失败，请检查配置。");
+                }
+
+                const files = await response.json();
+                const mdFiles = files.filter(f => f.name.endsWith('.md'));
+
+                if (mdFiles.length === 0) {
+                    appContainer.innerHTML = `<div class="text-center text-gray-500 py-20">文件夹是空的，快去上传文章吧！</div>`;
+                    return;
+                }
+
+                // 2. 并行下载所有文章内容
+                const promises = mdFiles.map(async (file) => {
+                    const rawUrl = `https://raw.githubusercontent.com/${CONFIG.username}/${CONFIG.repo}/${CONFIG.branch}/${file.path}`;
+                    const res = await fetch(rawUrl);
+                    const text = await res.text();
+                    // 调用智能解析器
+                    return parseSmartPost(text, file.name);
+                });
+
+                allPosts = await Promise.all(promises);
+                renderHome();
+
+            } catch (err) {
+                appContainer.innerHTML = '';
+                statusMsg.classList.remove('hidden');
+                statusMsg.innerHTML = `<div class="bg-red-50 text-red-600 p-4 rounded-lg text-center">${err.message}</div>`;
+            }
+        }
+
+        // --- 核心：智能解析器 (无需元数据) ---
+        function parseSmartPost(content, filename) {
+            const post = {
+                id: filename,
+                content: content,
+                title: '',
+                summary: '',
+                image: null
+            };
+
+            // 1. 智能提取标题：优先取第一个 # 标题，如果没有，则使用文件名
+            const titleMatch = content.match(/^#\s+(.+)$/m);
+            if (titleMatch) {
+                post.title = titleMatch[1].trim();
+            } else {
+                post.title = filename.replace('.md', '').replace(/_/g, ' '); // 把文件名作为标题
+            }
+
+            // 2. 智能提取图片：查找第一个 ![alt](url)
+            const imgMatch = content.match(/!\[.*?\]\((.*?)\)/);
+            if (imgMatch) {
+                post.image = imgMatch[1];
+            }
+
+            // 3. 智能提取摘要：去除所有 markdown 符号，取前100字
+            // 移除图片、标题、代码块
+            let plainText = content
+                .replace(/!\[.*?\]\(.*?\)/g, '') // 移除图片
+                .replace(/#+\s.+/g, '')          // 移除标题
+                .replace(/```[\s\S]*?```/g, '')  // 移除代码块
+                .replace(/(\*\*|__)(.*?)\1/g, '$2') // 移除加粗
+                .replace(/\n/g, ' ')             // 换行变空格
+                .trim();
+            
+            post.summary = plainText.substring(0, 120) + (plainText.length > 120 ? '...' : '');
+
+            return post;
+        }
+
+        // 渲染首页
+        function renderHome() {
+            let html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">';
+            
+            allPosts.forEach((post, index) => {
+                // 如果没有图片，生成一个随机的渐变背景类名 (0-3)
+                const bgClass = `gradient-bg-${(post.title.length + index) % 4}`;
+                
+                // 图片区域：有图显示图，没图显示渐变色块
+                const mediaHtml = post.image 
+                    ? `<div class="h-48 w-full overflow-hidden"><img src="${post.image}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" onerror="this.style.display='none'"></div>`
+                    : `<div class="h-48 w-full ${bgClass} flex items-center justify-center text-white opacity-90"><i data-lucide="file-text" class="w-12 h-12 opacity-50"></i></div>`;
+
+                html += `
+                    <article class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 group cursor-pointer flex flex-col h-full" onclick="renderPost('${post.id}')">
+                        ${mediaHtml}
+                        <div class="p-6 flex flex-col flex-grow">
+                            <h3 class="text-xl font-bold text-gray-900 mb-3 group-hover:text-indigo-600 transition leading-snug">${post.title}</h3>
+                            <p class="text-gray-500 text-sm line-clamp-3 mb-4 flex-grow">${post.summary || '点击阅读全文...'}</p>
+                            <div class="pt-4 border-t border-gray-50 flex items-center text-indigo-600 text-sm font-medium">
+                                阅读文章 <i data-lucide="arrow-right" class="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1"></i>
+                            </div>
+                        </div>
+                    </article>
+                `;
+            });
+            html += '</div>';
+
+            appContainer.innerHTML = html;
+            window.scrollTo(0, 0);
+            lucide.createIcons();
+        }
+
+        // 渲染文章详情
+        function renderPost(id) {
+            const post = allPosts.find(p => p.id === id);
+            if (!post) return;
+
+            // 修复：如果图片链接是相对路径 (如 images/a.jpg)，在详情页渲染时需要确保路径正确
+            // 这里我们依靠浏览器对 HTML 中 img 标签的解析（GitHub Pages 根目录为基准）
+            
+            const html = `
+                <div class="max-w-3xl mx-auto animate-fade-in">
+                    <button onclick="renderHome()" class="group mb-8 inline-flex items-center text-gray-500 hover:text-indigo-600 transition bg-white px-4 py-2 rounded-full shadow-sm border border-gray-100">
+                        <i data-lucide="arrow-left" class="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform"></i> 返回列表
+                    </button>
+                    
+                    <article class="bg-white rounded-3xl shadow-lg border border-gray-100 p-8 md:p-12">
+                        <div class="prose prose-lg prose-indigo max-w-none">
+                            ${marked.parse(post.content)}
+                        </div>
+                    </article>
+
+                    <div class="text-center mt-12 mb-8">
+                         <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})" class="text-gray-400 hover:text-gray-600 transition">
+                            <i data-lucide="arrow-up-circle" class="w-8 h-8 mx-auto mb-2"></i>
+                            <span class="text-xs">回到顶部</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+            appContainer.innerHTML = html;
+            window.scrollTo(0, 0);
+            lucide.createIcons();
+        }
+
+        init();
+    </script>
 </body>
 </html>
