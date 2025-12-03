@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -15,6 +15,8 @@
         .gradient-bg-1 { background: linear-gradient(135deg, #2af598 0%, #009efd 100%); }
         .gradient-bg-2 { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%); }
         .gradient-bg-3 { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); }
+        /* 专门为 PDF 准备的背景 */
+        .gradient-bg-pdf { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%); }
         
         .prose h1 { font-size: 2rem; font-weight: 800; margin-bottom: 1rem; color: #1f2937; line-height: 1.2; }
         .prose h2 { font-size: 1.5rem; font-weight: 700; margin-top: 2rem; margin-bottom: 1rem; color: #374151; }
@@ -94,26 +96,49 @@
                 const response = await fetch(apiUrl);
                 
                 if (!response.ok) {
-                    if (response.status === 404) throw new Error(`找不到 '${CONFIG.folder}' 文件夹。请在仓库根目录新建此文件夹并上传 .md 文件。`);
+                    if (response.status === 404) throw new Error(`找不到 '${CONFIG.folder}' 文件夹。请在仓库根目录新建此文件夹并上传 .md 或 .pdf 文件。`);
                     if (response.status === 403) throw new Error("API 访问过快，请稍后刷新。");
                     throw new Error("连接 GitHub 失败，请检查配置。");
                 }
 
                 const files = await response.json();
-                const mdFiles = files.filter(f => f.name.endsWith('.md'));
+                
+                // 筛选 .md 和 .pdf 文件
+                const validFiles = files.filter(f => f.name.toLowerCase().endsWith('.md') || f.name.toLowerCase().endsWith('.pdf'));
 
-                if (mdFiles.length === 0) {
+                if (validFiles.length === 0) {
                     appContainer.innerHTML = `<div class="text-center text-gray-500 py-20">文件夹是空的，快去上传文章吧！</div>`;
                     return;
                 }
 
-                // 2. 并行下载所有文章内容
-                const promises = mdFiles.map(async (file) => {
+                // 2. 并行处理文件
+                const promises = validFiles.map(async (file) => {
                     const rawUrl = `https://raw.githubusercontent.com/${CONFIG.username}/${CONFIG.repo}/${CONFIG.branch}/${file.path}`;
-                    const res = await fetch(rawUrl);
-                    const text = await res.text();
-                    // 调用智能解析器
-                    return parseSmartPost(text, file.name);
+                    // 如果你的网站开启了 GitHub Pages，PDF 使用 Pages 链接通常加载体验更好（避免 raw 的强制下载头）
+                    // 格式通常为: https://username.github.io/repo/folder/filename
+                    const pagesUrl = `https://${CONFIG.username}.github.io/${CONFIG.repo}/${CONFIG.folder}/${encodeURIComponent(file.name)}`;
+                    
+                    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+
+                    if (isPdf) {
+                        // PDF 处理逻辑：不需要下载内容，直接构造对象
+                        return {
+                            id: file.name,
+                            title: file.name.replace('.pdf', '').replace(/_/g, ' '),
+                            summary: 'PDF 文档 · 点击在线阅读',
+                            image: null,
+                            content: pagesUrl, // 使用 GitHub Pages URL 以获得更好的预览支持
+                            rawUrl: rawUrl,    // 备用下载链接
+                            type: 'pdf'
+                        };
+                    } else {
+                        // Markdown 处理逻辑：下载内容并解析
+                        const res = await fetch(rawUrl);
+                        const text = await res.text();
+                        const post = parseSmartPost(text, file.name);
+                        post.type = 'markdown';
+                        return post;
+                    }
                 });
 
                 allPosts = await Promise.all(promises);
@@ -136,28 +161,27 @@
                 image: null
             };
 
-            // 1. 智能提取标题：优先取第一个 # 标题，如果没有，则使用文件名
+            // 1. 智能提取标题
             const titleMatch = content.match(/^#\s+(.+)$/m);
             if (titleMatch) {
                 post.title = titleMatch[1].trim();
             } else {
-                post.title = filename.replace('.md', '').replace(/_/g, ' '); // 把文件名作为标题
+                post.title = filename.replace('.md', '').replace(/_/g, ' ');
             }
 
-            // 2. 智能提取图片：查找第一个 ![alt](url)
+            // 2. 智能提取图片
             const imgMatch = content.match(/!\[.*?\]\((.*?)\)/);
             if (imgMatch) {
                 post.image = imgMatch[1];
             }
 
-            // 3. 智能提取摘要：去除所有 markdown 符号，取前100字
-            // 移除图片、标题、代码块
+            // 3. 智能提取摘要
             let plainText = content
-                .replace(/!\[.*?\]\(.*?\)/g, '') // 移除图片
-                .replace(/#+\s.+/g, '')          // 移除标题
-                .replace(/```[\s\S]*?```/g, '')  // 移除代码块
-                .replace(/(\*\*|__)(.*?)\1/g, '$2') // 移除加粗
-                .replace(/\n/g, ' ')             // 换行变空格
+                .replace(/!\[.*?\]\(.*?\)/g, '')
+                .replace(/#+\s.+/g, '')
+                .replace(/```[\s\S]*?```/g, '')
+                .replace(/(\*\*|__)(.*?)\1/g, '$2')
+                .replace(/\n/g, ' ')
                 .trim();
             
             post.summary = plainText.substring(0, 120) + (plainText.length > 120 ? '...' : '');
@@ -170,13 +194,27 @@
             let html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">';
             
             allPosts.forEach((post, index) => {
-                // 如果没有图片，生成一个随机的渐变背景类名 (0-3)
-                const bgClass = `gradient-bg-${(post.title.length + index) % 4}`;
+                let bgClass = `gradient-bg-${(post.title.length + index) % 4}`;
+                let icon = 'file-text';
                 
-                // 图片区域：有图显示图，没图显示渐变色块
-                const mediaHtml = post.image 
-                    ? `<div class="h-48 w-full overflow-hidden"><img src="${post.image}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" onerror="this.style.display='none'"></div>`
-                    : `<div class="h-48 w-full ${bgClass} flex items-center justify-center text-white opacity-90"><i data-lucide="file-text" class="w-12 h-12 opacity-50"></i></div>`;
+                // 如果是 PDF，使用特定的样式
+                if (post.type === 'pdf') {
+                    bgClass = 'bg-gradient-to-br from-red-100 to-red-200'; // 红色系代表 PDF
+                    icon = 'file-warning'; // 或者 file-text
+                }
+                
+                // 图片区域
+                let mediaHtml = '';
+                if (post.image) {
+                    mediaHtml = `<div class="h-48 w-full overflow-hidden"><img src="${post.image}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" onerror="this.style.display='none'"></div>`;
+                } else {
+                    // 没有图片时的默认显示
+                    const iconHtml = post.type === 'pdf' 
+                        ? `<div class="flex flex-col items-center"><i data-lucide="file-text" class="w-12 h-12 text-red-500 mb-2"></i><span class="text-xs font-bold text-red-500 uppercase">PDF FILE</span></div>`
+                        : `<i data-lucide="file-text" class="w-12 h-12 opacity-50"></i>`;
+                        
+                    mediaHtml = `<div class="h-48 w-full ${bgClass} flex items-center justify-center text-white opacity-90">${iconHtml}</div>`;
+                }
 
                 html += `
                     <article class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 group cursor-pointer flex flex-col h-full" onclick="renderPost('${post.id}')">
@@ -185,7 +223,7 @@
                             <h3 class="text-xl font-bold text-gray-900 mb-3 group-hover:text-indigo-600 transition leading-snug">${post.title}</h3>
                             <p class="text-gray-500 text-sm line-clamp-3 mb-4 flex-grow">${post.summary || '点击阅读全文...'}</p>
                             <div class="pt-4 border-t border-gray-50 flex items-center text-indigo-600 text-sm font-medium">
-                                阅读文章 <i data-lucide="arrow-right" class="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1"></i>
+                                ${post.type === 'pdf' ? '预览文档' : '阅读文章'} <i data-lucide="arrow-right" class="w-4 h-4 ml-1 transition-transform group-hover:translate-x-1"></i>
                             </div>
                         </div>
                     </article>
@@ -203,20 +241,41 @@
             const post = allPosts.find(p => p.id === id);
             if (!post) return;
 
-            // 修复：如果图片链接是相对路径 (如 images/a.jpg)，在详情页渲染时需要确保路径正确
-            // 这里我们依靠浏览器对 HTML 中 img 标签的解析（GitHub Pages 根目录为基准）
-            
-            const html = `
-                <div class="max-w-3xl mx-auto animate-fade-in">
-                    <button onclick="renderHome()" class="group mb-8 inline-flex items-center text-gray-500 hover:text-indigo-600 transition bg-white px-4 py-2 rounded-full shadow-sm border border-gray-100">
-                        <i data-lucide="arrow-left" class="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform"></i> 返回列表
-                    </button>
-                    
+            let contentBody = '';
+
+            if (post.type === 'pdf') {
+                // PDF 渲染：嵌入对象 + 下载链接
+                contentBody = `
+                    <div class="w-full h-[80vh] bg-gray-100 rounded-xl overflow-hidden mb-8 border border-gray-200">
+                        <embed src="${post.content}" type="application/pdf" width="100%" height="100%" />
+                    </div>
+                    <div class="text-center">
+                        <p class="mb-4 text-gray-600">如果无法预览，请点击下方按钮下载：</p>
+                        <a href="${post.content}" target="_blank" class="inline-flex items-center px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition">
+                            <i data-lucide="download" class="w-5 h-5 mr-2"></i> 下载 PDF
+                        </a>
+                    </div>
+                `;
+            } else {
+                // Markdown 渲染
+                contentBody = `
                     <article class="bg-white rounded-3xl shadow-lg border border-gray-100 p-8 md:p-12">
                         <div class="prose prose-lg prose-indigo max-w-none">
                             ${marked.parse(post.content)}
                         </div>
                     </article>
+                `;
+            }
+            
+            const html = `
+                <div class="max-w-4xl mx-auto animate-fade-in">
+                    <button onclick="renderHome()" class="group mb-8 inline-flex items-center text-gray-500 hover:text-indigo-600 transition bg-white px-4 py-2 rounded-full shadow-sm border border-gray-100">
+                        <i data-lucide="arrow-left" class="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform"></i> 返回列表
+                    </button>
+                    
+                    ${post.type === 'markdown' ? `<h1 class="text-3xl font-extrabold text-gray-900 mb-8 text-center">${post.title}</h1>` : ''}
+
+                    ${contentBody}
 
                     <div class="text-center mt-12 mb-8">
                          <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})" class="text-gray-400 hover:text-gray-600 transition">
